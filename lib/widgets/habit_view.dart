@@ -123,7 +123,7 @@ class HabitBody extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 360),
+      constraints: const BoxConstraints(maxHeight: 240),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: backgroundColor,
