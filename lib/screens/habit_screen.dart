@@ -17,6 +17,8 @@ class _HabitScreenState extends State<HabitScreen> {
   List<Habit> habitList = [];
   bool isLoading = true;
   int totalHabitCount = 0;
+  int completedCount = 0;
+  bool isComplete = false;
 
   @override
   void initState() {
@@ -44,6 +46,7 @@ class _HabitScreenState extends State<HabitScreen> {
         totalHabitCount = defaultHabits.length;
         completedCount = 0;
         isLoading = false;
+        isComplete = habitList.isEmpty;
       });
       await storageService.saveHabitList(habitList);
       await storageService.saveHabitSummary(
@@ -62,37 +65,8 @@ class _HabitScreenState extends State<HabitScreen> {
     });
   }
 
-  int currentIndex = 0;
-  int completedCount = 0;
-  int get todoCount => habitList.length;
-
-  bool isComplete = false;
-
-  Habit get currentHabit => habitList[currentIndex];
-
-  bool get isLastHabit => currentIndex == habitList.length - 1;
-
-  void goToNextHabit() {
-    if (isLastHabit) {
-      if (habitList.isEmpty) {
-        setState(() {
-          isComplete = true;
-        });
-      } else {
-        setState(() {
-          currentIndex = 0;
-        });
-      }
-    } else {
-      setState(() {
-        currentIndex++;
-      });
-    }
-  }
-
   Future<void> restartSession() async {
     setState(() {
-      currentIndex = 0;
       completedCount = 0;
       habitList = habitsData
           .map(
@@ -118,22 +92,18 @@ class _HabitScreenState extends State<HabitScreen> {
     );
   }
 
-  Future<void> markHabitAsComplete() async {
-    if (habitList.isEmpty) {
+  Future<void> markHabitAsComplete(int habitId) async {
+    final index = habitList.indexWhere((habit) => habit.id == habitId);
+    if (index == -1) {
       return;
     }
 
     setState(() {
-      currentHabit.isComplete = true;
+      final habitToComplete = habitList[index];
+      habitToComplete.isComplete = true;
       completedCount++;
-      habitList.removeAt(currentIndex);
-
-      if (habitList.isEmpty) {
-        isComplete = true;
-        currentIndex = 0;
-      } else {
-        currentIndex = currentIndex.clamp(0, habitList.length - 1);
-      }
+      habitList.removeAt(index);
+      isComplete = habitList.isEmpty;
     });
 
     await storageService.saveHabitList(habitList);
@@ -151,29 +121,13 @@ class _HabitScreenState extends State<HabitScreen> {
     });
   }
 
-  void markHabitAsIncomplete() {
-    setState(() {
-      currentHabit.isComplete = false;
-
-      if (isLastHabit) {
-        if (habitList.isEmpty) {
-          isComplete = true;
-        } else {
-          currentIndex = 0;
-        }
-      } else {
-        currentIndex++;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            restartSession();
+            await restartSession();
           },
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -186,29 +140,36 @@ class _HabitScreenState extends State<HabitScreen> {
               ),
               const SizedBox(height: 22),
               const Text(
-                'Swipe right if you completed the habit, swipe left to come back to it. Pull down to restart the session.',
+                'Swipe either direction to complete and remove a habit. Pull down to restart the session.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              const SizedBox(height: 70),
+              const SizedBox(height: 18),
+              Text(
+                'Habits Completed: $completedCount / $totalHabitCount',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
               if (isLoading)
                 const Center(child: CircularProgressIndicator())
+              else if (isComplete || habitList.isEmpty)
+                CompletionPanel(
+                  completedCount: completedCount,
+                  remainingCount: habitList.length,
+                )
               else
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.5,
-                  child: Center(
-                    child: isComplete || habitList.isEmpty
-                        ? CompletionPanel(
-                            completedCount: completedCount,
-                            remainingCount: habitList.length,
-                          )
-                        : HabitView(
-                            key: ValueKey(currentHabit.id),
-                            habit: currentHabit,
-                            onSwipeLeft: markHabitAsIncomplete,
-                            onSwipeRight: markHabitAsComplete,
-                          ),
-                  ),
+                Column(
+                  children: [
+                    for (final habit in habitList)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: HabitView(
+                          key: ValueKey(habit.id),
+                          habit: habit,
+                          onSwipeComplete: () => markHabitAsComplete(habit.id),
+                        ),
+                      ),
+                  ],
                 ),
               if (!isLoading && !isComplete) ...[
                 const SizedBox(height: 24),
@@ -226,16 +187,11 @@ class _HabitScreenState extends State<HabitScreen> {
                   ),
                 ),
               ],
-              const SizedBox(height: 24),
-              Text(
-                'Habits Completed: $completedCount / $totalHabitCount',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
-              ),
             ],
           ),
+        ),
       ),
-    ));
+    );
   }
 }
 
